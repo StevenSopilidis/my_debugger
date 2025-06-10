@@ -1,26 +1,50 @@
 #include <libsdb/process.hpp>
 #include <libsdb/error.hpp>
+#include <libsdb/pipe.hpp>
 #include <sys/ptrace.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+namespace {
+    void exit_with_error(sdb::pipe& channel, const std::string& prefix) {
+        auto msg = prefix + ": " + std::strerror(errno);
+        channel.write(reinterpret_cast<std::byte*>(msg.data()), msg.size());
+        exit(-1);
+    }
+}
+
 std::unique_ptr<sdb::process>
 sdb::process::launch(std::filesystem::path path)
 {
+    pipe channel(true);
+
     pid_t pid;
     if ((pid = fork()) < 0) {
-        error::send_errno("fork() failed");
+        error::send_error("fork() failed");
     }
 
     if (pid == 0)
     {
+        // child process
+        channel.close_read();
         if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
-            error::send_errno("tracing failed");
+            exit_with_error(channel, "tracing failed");
         }
         if (execlp(path.c_str(), path.c_str(), nullptr) < 0) {
-            error::send_errno("exec() failed");
+            exit_with_error(channel, "exec() failed");
         }
+    }
+
+    // parent process
+    channel.close_write();
+    auto data = channel.read();
+
+    if (data.size() > 0) {
+        // process sent data, something went wrong
+        waitpid(pid, nullptr, 0);
+        auto chars = reinterpret_cast<char*>(data.data());
+        error::send_error(std::string(chars, chars + data.size()));
     }
 
     std::unique_ptr<process> proc(new process(pid, true));
@@ -36,7 +60,7 @@ sdb::process::attach(pid_t pid) {
     }
 
     if (ptrace(PTRACE_ATTACH, pid, nullptr, nullptr) < 0) {
-        error::send_errno("could not attach");
+        error::send_error("could not attach");
     }
 
     std::unique_ptr<sdb::process> proc(new process(pid, false));
@@ -65,7 +89,7 @@ sdb::process::~process() {
 
 void sdb::process::resume() {
     if (ptrace(PTRACE_CONT, pid_, nullptr, nullptr) < 0) {
-        error::send_errno("could not resume");
+        error::send_error("could not resume");
     }
 
     state_ = process_state::running;
@@ -91,7 +115,7 @@ sdb::stop_reason sdb::process::wait_on_signal() {
     int options = 0;
 
     if (waitpid(pid_, &wait_status, options) < 0) {
-        error::send_errno("waitpid() failed");
+        error::send_error("waitpid() failed");
     }
 
     stop_reason reason(wait_status);

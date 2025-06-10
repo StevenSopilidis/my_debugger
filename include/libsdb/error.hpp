@@ -13,7 +13,7 @@ namespace sdb {
         }
 
         [[noreturn]]
-        static void send_errno(const std::string& prefix) {
+        static void send_error(const std::string& prefix) {
             throw error(prefix + ": " + std::strerror(errno));
         }
 
