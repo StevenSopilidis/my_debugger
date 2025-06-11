@@ -15,7 +15,7 @@ namespace {
 }
 
 std::unique_ptr<sdb::process>
-sdb::process::launch(std::filesystem::path path)
+sdb::process::launch(std::filesystem::path path, bool debug)
 {
     pipe channel(true);
 
@@ -28,9 +28,10 @@ sdb::process::launch(std::filesystem::path path)
     {
         // child process
         channel.close_read();
-        if (ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
+        if (debug && ptrace(PTRACE_TRACEME, 0, nullptr, nullptr) < 0) {
             exit_with_error(channel, "tracing failed");
         }
+
         if (execlp(path.c_str(), path.c_str(), nullptr) < 0) {
             exit_with_error(channel, "exec() failed");
         }
@@ -47,8 +48,11 @@ sdb::process::launch(std::filesystem::path path)
         error::send_error(std::string(chars, chars + data.size()));
     }
 
-    std::unique_ptr<process> proc(new process(pid, true));
-    proc->wait_on_signal();
+    std::unique_ptr<process> proc(new process(pid, true, debug));
+
+    if (debug) {
+        proc->wait_on_signal();
+    }
     
     return proc;
 }
@@ -63,7 +67,7 @@ sdb::process::attach(pid_t pid) {
         error::send_error("could not attach");
     }
 
-    std::unique_ptr<sdb::process> proc(new process(pid, false));
+    std::unique_ptr<sdb::process> proc(new process(pid, false, true));
     proc->wait_on_signal();
     return proc;
 }
@@ -72,13 +76,15 @@ sdb::process::~process() {
     if (pid_ != 0) {
         int status;
 
-        if (state_ == process_state::running) {
-            kill(pid_, SIGSTOP); // send stop signal
-            waitpid(pid_, &status, 0); // wait for process to receive it
+        if (is_attached_) {
+            if (state_ == process_state::running) {
+                kill(pid_, SIGSTOP); // send stop signal
+                waitpid(pid_, &status, 0); // wait for process to receive it
+            }
+    
+            ptrace(PTRACE_DETACH, pid_, nullptr, nullptr); // detach process
+            kill(pid_, SIGCONT); // let it continue
         }
-
-        ptrace(PTRACE_DETACH, pid_, nullptr, nullptr); // detach process
-        kill(pid_, SIGCONT); // let it continue
 
         if (terminate_on_end_) { // if we created the process, kill it
             kill(pid_, SIGKILL);
