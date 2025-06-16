@@ -69,7 +69,7 @@ void sdb::registers::write(const register_info& info, value val) {
 
     if (info.type == register_type::fpr) {
         // if register fpr then we must write them all at once
-        proc_->write_fprs(&data_.i387);
+        proc_->write_fprs(data_.i387);
     } else {
         // write individual gpr in user area
         // data must be 8-byte aligned (set lowest 3 bits to 0)

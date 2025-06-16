@@ -3,8 +3,8 @@
 
 #include <filesystem>
 #include <memory>
+#include <optional>
 #include <sys/types.h>
-#include <cstdint>
 #include <libsdb/registers.hpp>
 
 namespace sdb {
@@ -24,39 +24,39 @@ namespace sdb {
 
     class process {
     public:
-        process() = delete;
-        process(const process& ) = delete;
-        process& operator=(const process& ) = delete;
         ~process();
-
-        static std::unique_ptr<process> launch(
-            std::filesystem::path path, 
-            bool debug = true
-        );
+        static std::unique_ptr<process> launch(std::filesystem::path path,
+            bool debug = true,
+            std::optional<int> stdout_replacement = std::nullopt);
         static std::unique_ptr<process> attach(pid_t pid);
 
         void resume();
         stop_reason wait_on_signal();
-        pid_t pid() const { return pid_; }
+
+        process() = delete;
+        process(const process&) = delete;
+        process& operator=(const process&) = delete;
+
         process_state state() const { return state_; }
+        pid_t pid() const { return pid_; }
 
         registers& get_registers() { return *registers_; }
         const registers& get_registers() const { return *registers_; }
 
         void write_user_area(std::size_t offset, std::uint64_t data);
 
-        void write_fprs(const user_fpregs_struct* fprs);
-        void write_gprs(const user_regs_struct* gprs);
+        void write_fprs(const user_fpregs_struct& fprs);
+        void write_gprs(const user_regs_struct& fprs);
+
 
     private:
         process(pid_t pid, bool terminate_on_end, bool is_attached)
-            : pid_(pid), 
-            terminate_on_end_(terminate_on_end), 
-            is_attached_(is_attached),
-            registers_(new registers(*this))
+            : pid_(pid), terminate_on_end_(terminate_on_end),
+            is_attached_(is_attached), registers_(new registers(*this))
         {}
 
         void read_all_registers();
+
 
         pid_t pid_ = 0;
         bool terminate_on_end_ = true;

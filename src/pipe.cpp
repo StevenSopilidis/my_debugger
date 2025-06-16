@@ -6,7 +6,7 @@
 
 sdb::pipe::pipe(bool close_on_exec) {
     if (pipe2(fds_, close_on_exec? O_CLOEXEC : 0) < 0) {
-        error::send_error("pipe creation failed");
+        error::send_errno("pipe creation failed");
     }
 }
 
@@ -42,7 +42,7 @@ std::vector<std::byte> sdb::pipe::read() {
     int chars_read;
 
     if ((chars_read = ::read(fds_[read_fd_], buff, sizeof(buff))) < 0) {
-        error::send_error("Could not read from pipe");
+        error::send_errno("Could not read from pipe");
     }
 
     auto bytes = reinterpret_cast<std::byte*>(buff);
@@ -51,6 +51,6 @@ std::vector<std::byte> sdb::pipe::read() {
 
 void sdb::pipe::write(std::byte* from, std::size_t bytes) {
     if (::write(fds_[write_fd_], from, bytes) < 0) {
-        error::send_error("could not write to pipe");
+        error::send_errno("could not write to pipe");
     }
 }
