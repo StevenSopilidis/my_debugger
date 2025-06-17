@@ -1,8 +1,10 @@
 #include <catch2/catch_test_macros.hpp>
 #include <libsdb/process.hpp>
-#include <signal.h>
-#include <sys/types.h>
 #include <libsdb/error.hpp>
+#include <libsdb/pipe.hpp>
+#include <libsdb/bit.hpp>
+#include <sys/types.h>
+#include <signal.h>
 #include <fstream>
 
 using namespace sdb;
@@ -18,7 +20,6 @@ namespace {
         std::string data;
         std::getline(stat, data);
         auto index_of_last_parenthesis = data.rfind(')');
-        // format of stat file: pid (name_of_process) status ..........
         auto index_of_status_indicator = index_of_last_parenthesis + 2;
         return data[index_of_status_indicator];
     }
@@ -36,7 +37,7 @@ TEST_CASE("process::launch no such program", "[process]") {
 TEST_CASE("process::attach success", "[process]") {
     auto target = process::launch("targets/run_endlessly", false);
     auto proc = process::attach(target->pid());
-    REQUIRE(get_process_status(target->pid()) == 't'); // t --> tracing stop
+    REQUIRE(get_process_status(target->pid()) == 't');
 }
 
 TEST_CASE("process::attach invalid PID", "[process]") {
@@ -63,8 +64,69 @@ TEST_CASE("process::resume success", "[process]") {
 }
 
 TEST_CASE("process::resume already terminated", "[process]") {
-    auto proc = process::launch("targets/end_immediately");
+    {
+        auto proc = process::launch("targets/end_immediately");
+        proc->resume();
+        proc->wait_on_signal();
+        REQUIRE_THROWS_AS(proc->resume(), error);
+    }
+
+    {
+        auto target = process::launch("targets/end_immediately", false);
+        auto proc = process::attach(target->pid());
+        proc->resume();
+        proc->wait_on_signal();
+        REQUIRE_THROWS_AS(proc->resume(), error);
+    }
+}
+
+TEST_CASE("Write registers works", "[register]") {
+    bool close_on_exec = false;
+    sdb::pipe channel(close_on_exec);
+
+    auto proc = process::launch("targets/reg_write", true, channel.get_write());
+    channel.close_write();
+
+    proc->resume(); // first trap
+    proc->wait_on_signal();
+    
+    auto& regs = proc->get_registers(); // write register
+    
+    // write rsi    
+    regs.write_by_id(register_id::rsi, 0xcafecafe);
+    proc->resume(); // second trap (process should have written to channel)
+    proc->wait_on_signal();
+
+    auto out = channel.read();
+    REQUIRE(to_string_view(out) == "0xcafecafe");
+
+    // write mm0
+    regs.write_by_id(register_id::mm0, 0xba5eba11);
     proc->resume();
     proc->wait_on_signal();
-    REQUIRE_THROWS_AS(proc->resume(), error);
+
+    out = channel.read();
+    REQUIRE(to_string_view(out) == "0xba5eba11");
+
+    // write xmm0
+    regs.write_by_id(register_id::xmm0, 42.24);
+    proc->resume();
+    proc->wait_on_signal();
+
+    out = channel.read();
+    REQUIRE(to_string_view(out) == "42.24");
+
+    // write st0
+    regs.write_by_id(register_id::st0, 42.24l);
+    // set status word register
+    regs.write_by_id(register_id::fsw, std::uint16_t{0b0011100000000000});
+    // set tag register
+    regs.write_by_id(register_id::ftw, std::uint16_t{0b0011111111111111});
+    proc->resume();
+    proc->wait_on_signal();
+
+    out = channel.read();
+    REQUIRE(to_string_view(out) == "42.24");
+
+    proc->resume();
 }
