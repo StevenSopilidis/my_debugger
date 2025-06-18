@@ -26,7 +26,7 @@ namespace sdb {
 
         template <class T>
         T read_by_id_as(register_id id) const {
-            return std::get<T>(read(register_info_by(id)));
+            return std::get<T>(read(register_info_by_id(id)));
         }
 
         void write_by_id(register_id id, value val) {

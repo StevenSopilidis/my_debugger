@@ -32,7 +32,7 @@ namespace sdb {
     }
 
     template <class From>
-    byte64 to_byte164(From src) {
+    byte64 to_byte64(From src) {
         byte64 ret{};
         std::memcpy(&ret, &src, sizeof(From));
         return ret;
