@@ -39,7 +39,7 @@ namespace sdb {
         id_type id_; // unique id for break point
         bool is_enabled_; 
         virt_addr address_;
-        std::byte saved_data_;
+        std::byte saved_data_; // saved instructions that will be replaced by int3 for the breaking
         process* process_;
     };
 }
