@@ -4,6 +4,7 @@
 #include <sys/wait.h>
 #include <libsdb/error.hpp>
 #include <libsdb/pipe.hpp>
+#include <sys/personality.h>
 
 namespace {
     void exit_with_perror(
@@ -26,6 +27,9 @@ sdb::process::launch(std::filesystem::path path,
     }
 
     if (pid == 0) {
+        // disable ASLR
+        personality(ADDR_NO_RANDOMIZE);
+
         channel.close_read();
 
         if (stdout_replacement) {
@@ -97,10 +101,50 @@ sdb::process::~process() {
 }
 
 void sdb::process::resume() {
+    // if we have been paused due to breakpoint step-over breakpoint
+    auto pc = get_pc();
+    if (breakpoint_sites_.enabled_stoppoint_at_address(pc)) {
+        auto& bp = breakpoint_sites_.get_by_address(pc);
+        bp.disable(); // disable breakpoint
+        if (ptrace(PTRACE_SINGLESTEP, pid_, nullptr, nullptr) < 0) { // step over breakpoint
+            error::send_errno("Failed to single step");
+        }
+
+        int wait_status;
+        if (waitpid(pid_, &wait_status, 0) < 0) { // wait for inferior to execute above instruction
+            error::send_errno("waitpid failed");
+        }
+        bp.enable(); // enable breakpoint so it can be used multiple times
+    }
+
     if (ptrace(PTRACE_CONT, pid_, nullptr, nullptr) < 0) {
         error::send_errno("Could not resume");
     }
     state_ = process_state::running;
+}
+
+sdb::stop_reason sdb::process::step_instruction() {
+    // returns reason it stoped that descibes why process halted
+    // after stepping
+    std::optional<breakpoint_site*> to_reenable;
+    auto pc = get_pc();
+
+    // disable breakpoint if enabled at pc before stepping
+    if (breakpoint_sites_.enabled_stoppoint_at_address(pc)) { 
+        auto& bp = breakpoint_sites_.get_by_address(pc);
+        bp.disable();
+        to_reenable = &bp;
+    }
+
+    if (ptrace(PTRACE_SINGLESTEP, pid_, nullptr, nullptr) < 0) {
+        error::send_errno("Could not single step");
+    }
+    auto reason = wait_on_signal();
+
+    if (to_reenable) {
+        to_reenable.value()->enable();
+    }
+    return reason;
 }
 
 sdb::stop_reason::stop_reason(int wait_status) {
@@ -129,6 +173,12 @@ sdb::stop_reason sdb::process::wait_on_signal() {
 
     if (is_attached_ and state_ == process_state::stopped) {
         read_all_registers();
+
+        // if it stoped due to breakpoint, set pc back 1 byte
+        auto instr_begin = get_pc() - 1;
+        if (reason.info == SIGTRAP and breakpoint_sites_.enabled_stoppoint_at_address(instr_begin)) {
+            set_pc(instr_begin);
+        }
     }
 
     return reason;
