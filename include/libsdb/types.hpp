@@ -60,7 +60,7 @@ namespace sdb {
         }
 
     private:
-        std::uint8_t addr_ = 0;
+        std::uint64_t addr_ = 0;
     };
 }
 
