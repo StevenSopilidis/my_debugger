@@ -2,6 +2,7 @@
 #include <sys/ptrace.h>
 #include <libsdb/process.hpp>
 #include <libsdb/error.hpp>
+#include <iostream>
 
 namespace {
     auto get_next_id() {
@@ -32,7 +33,7 @@ void sdb::breakpoint_site::enable() {
     if (ptrace(PTRACE_POKEDATA, process_->pid(), address_, data_with_int3) < 0) 
         error::send_errno("Enabling breakpoint site failed");
 
-    is_enabled_ = false;
+    is_enabled_ = true;
 }
 
 void sdb::breakpoint_site::disable() {

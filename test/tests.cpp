@@ -340,21 +340,21 @@ TEST_CASE("Breakpoint on address works", "[breakpoint]") {
     auto load_address = get_load_address(proc->pid(), offset);
 
     proc->create_breakpoint_site(load_address).enable();
-    // proc->resume();
-    // auto reason = proc->wait_on_signal();
+    proc->resume();
+    auto reason = proc->wait_on_signal();
 
-    // REQUIRE(reason.reason == process_state::stopped);
-    // REQUIRE(reason.info == SIGTRAP);
-    // REQUIRE(proc->get_pc() == load_address);
+    REQUIRE(reason.reason == process_state::stopped);
+    REQUIRE(reason.info == SIGTRAP);
+    REQUIRE(proc->get_pc() == load_address);
 
-    // proc->resume();
-    // reason = proc->wait_on_signal();
+    proc->resume();
+    reason = proc->wait_on_signal();
 
-    // REQUIRE(reason.reason == process_state::exited);
-    // REQUIRE(reason.info == 0);
+    REQUIRE(reason.reason == process_state::exited);
+    REQUIRE(reason.info == 0);
 
-    // auto data = channel.read();
-    // REQUIRE(to_string_view(data) == "Hello, sdb!\n");
+    auto data = channel.read();
+    REQUIRE(to_string_view(data) == "Hello, sdb!\n");
 }
 
 TEST_CASE("Can remove breakpoint sites", "[breakpoint]") {

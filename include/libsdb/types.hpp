@@ -13,7 +13,7 @@ namespace sdb {
         virt_addr() = default;
         explicit virt_addr(std::uint64_t addr) : addr_(addr) {}
 
-        std::uint8_t addr() const {
+        std::uint64_t addr() const {
             return addr_;
         } 
 
