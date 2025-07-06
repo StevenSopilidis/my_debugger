@@ -5,6 +5,7 @@
 #include <libsdb/error.hpp>
 #include <libsdb/pipe.hpp>
 #include <sys/personality.h>
+#include <libsdb/bit.hpp>
 
 namespace {
     void exit_with_perror(
@@ -228,4 +229,53 @@ sdb::breakpoint_site& sdb::process::create_breakpoint_site(virt_addr address) {
     return breakpoint_sites_.push(
         std::unique_ptr<breakpoint_site>(new breakpoint_site(*this, address))
     );
+}
+
+std::vector<std::byte> sdb::process::read_memory(virt_addr address, std::size_t amount) const {
+    std::vector<std::byte> ret(amount);
+
+    iovec local_desc{ret.data(), ret.size()};
+    std::vector<iovec> remote_descs;
+
+    // splitting the read request into multiple iovec chunks, where each chunk lies 
+    // entirely within a single memory page of the target process.
+    while (amount > 0) {
+        // 0x100 = 4096 bytes = 1 memory page,
+        // address.addr() & 0xfff gives the offset within the page.
+        // up_to_next_page is how much we can read until we cross a page boundary.
+        auto up_to_next_page = 0x1000 - (address.addr() & 0xfff); 
+        auto chunk_size = std::min(amount, up_to_next_page);
+        remote_descs.push_back({ reinterpret_cast<void*>(address.addr()), chunk_size });
+        amount -= chunk_size;
+        address += chunk_size;
+    }
+
+    if (process_vm_readv(pid_, &local_desc, /*liovcnt=*/1, remote_descs.data(),  /*riovcnt=*/remote_descs.size(), /*flags=*/1) < 0) {
+        error::send_errno("Could not read process memory");
+    }
+}
+
+void sdb::process::write_memory(virt_addr address, span<const std::byte> data) {
+    std::size_t written = 0;
+    
+    while (written < data.size()) {
+        auto remaining = data.size() - written;
+        std::uint64_t word;
+
+        if (remaining > 8) {
+            word = from_bytes<uint64_t>(data.begin() + written);
+        } else {
+            // if we need to write less than word just read data that we need to not override and 
+            // merge them with data to write
+            auto read = read_memory(address + written, 8);
+            auto word_data = reinterpret_cast<char*>(&word);
+            std::memcpy(word_data, data.begin() + written, remaining); // first remaining bytes
+            std::memcpy(word_data + remaining, read.data() + remaining, 8 - remaining);  // put the ones we dont want to override
+        }
+
+        if (ptrace(PTRACE_POKEDATA, pid_, address + written, word) < 0)
+            error::send_errno("Failed to write memory");
+
+        written += 8;
+    }
 }
