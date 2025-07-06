@@ -28,7 +28,7 @@ namespace sdb {
             return address_ == addr;
         }
 
-        bool is_range(virt_addr low, virt_addr high) const {
+        bool in_range(virt_addr low, virt_addr high) const {
             return low <= address_ and address_ <= high;
         }
 
