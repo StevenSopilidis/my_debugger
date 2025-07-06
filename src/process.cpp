@@ -232,27 +232,16 @@ sdb::breakpoint_site& sdb::process::create_breakpoint_site(virt_addr address) {
 }
 
 std::vector<std::byte> sdb::process::read_memory(virt_addr address, std::size_t amount) const {
-    std::vector<std::byte> ret(amount);
+	std::vector<std::byte> ret(amount);
 
-    iovec local_desc{ret.data(), ret.size()};
-    std::vector<iovec> remote_descs;
+	iovec local_desc{ ret.data(), ret.size() };
+	iovec remote_desc{ reinterpret_cast<void*>(address.addr()), amount };
 
-    // splitting the read request into multiple iovec chunks, where each chunk lies 
-    // entirely within a single memory page of the target process.
-    while (amount > 0) {
-        // 0x100 = 4096 bytes = 1 memory page,
-        // address.addr() & 0xfff gives the offset within the page.
-        // up_to_next_page is how much we can read until we cross a page boundary.
-        auto up_to_next_page = 0x1000 - (address.addr() & 0xfff); 
-        auto chunk_size = std::min(amount, up_to_next_page);
-        remote_descs.push_back({ reinterpret_cast<void*>(address.addr()), chunk_size });
-        amount -= chunk_size;
-        address += chunk_size;
-    }
-
-    if (process_vm_readv(pid_, &local_desc, /*liovcnt=*/1, remote_descs.data(),  /*riovcnt=*/remote_descs.size(), /*flags=*/1) < 0) {
-        error::send_errno("Could not read process memory");
-    }
+	if (process_vm_readv(pid_, &local_desc, /*liovcnt=*/1,
+		&remote_desc, /*riovcnt=*/1, /*flags=*/0) < 0) {
+		error::send_errno("Could not read process memory");
+	}
+	return ret;
 }
 
 void sdb::process::write_memory(virt_addr address, span<const std::byte> data) {

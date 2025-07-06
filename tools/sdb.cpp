@@ -80,6 +80,7 @@ namespace
             std::cerr << R"(Available commands:
                 breakpoint  - Command for operating on breakpoints
                 continue    - Resume the process
+                mem      - Command for operating on memory
                 register    - Commands for operating on registers
                 step        - Step over a single instruction
             )" << "\n";
@@ -99,6 +100,13 @@ namespace
                 disable <id>
                 enable <id>
                 set <address>
+                )" << "\n";
+        }
+        else if (is_prefix(args[1], "memory")) {
+            std::cerr << R"(Available commands:
+                read <address>
+                read <address> <number_of_bytes>
+                write <address> <bytes>
                 )" << "\n";
         }
         else {
@@ -283,7 +291,71 @@ namespace
         else if (is_prefix(command, "delete")) {
             process.breakpoint_sites().remove_by_id(*id);
         }
-    }   
+    }
+
+    void handle_memory_read_command(
+        sdb::process& process,
+        const std::vector<std::string>& args
+    ) {
+        auto address = sdb::to_integral<std::uint64_t>(args[2], 16);
+        if (!address)
+            sdb::error::send("Invalid address format");
+        
+        auto n_bytes = 32;
+        if (args.size() == 4) { // use provided ammount of data to read
+            auto bytes_arg = sdb::to_integral<std::size_t>(args[3]);
+            if (!bytes_arg)
+                sdb::error::send("Invalid number of bytes");
+
+            n_bytes = *bytes_arg;
+        }
+
+        auto data = process.read_memory(sdb::virt_addr{*address}, n_bytes);
+        // print data read in batches of 16 bytes in hex
+        for (std::size_t i = 0; i < data.size(); i += 16) {
+            auto start = data.begin() + i;
+            auto end = data.begin() + std::min(i + 16, data.size());
+            fmt::print("{:#016x}: {:02x}\n", *address + i, fmt::join(start, end, " "));
+        }
+    }
+
+    void handle_memory_write_command(
+        sdb::process& process,
+        const std::vector<std::string>& args
+    ) {
+        // data to be written should be of format [data1,data2,data3....]
+        if (args.size() != 4) { // format: memory write <address> <data>
+            print_help({"help", "memory"});
+            return;
+        }
+
+        auto address = sdb::to_integral<std::uint64_t>(args[2], 16);
+        if (!address)
+            sdb::error::send("Invalid address format");
+
+        auto data = sdb::parse_vector(args[3]);
+        process.write_memory(sdb::virt_addr{*address}, {data.data(), data.size()});
+    }
+
+    void handle_memory_command(
+        sdb::process& process,
+        const std::vector<std::string>& args
+    ) {
+        if (args.size() < 3) {
+            print_help({"help", "memory"});
+            return;
+        }
+
+        if (is_prefix(args[1], "read")) {
+            handle_memory_read_command(process, args);
+        }
+        else if (is_prefix(args[1], "write")) {
+            handle_memory_write_command(process, args);
+        }
+        else {
+            print_help({"help", "memory"});
+        }
+    }
 
     void handle_command(
         std::unique_ptr<sdb::process>& process, 
@@ -310,6 +382,9 @@ namespace
         else if (is_prefix(command, "step")) {
             auto reason = process->step_instruction();
             print_stop_reason(*process, reason);
+        }
+        else if (is_prefix(command, "mem")) {
+            handle_memory_command(*process, args);
         }
         else {
             std::cerr << "Unknown command\n";
