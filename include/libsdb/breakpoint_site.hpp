@@ -32,8 +32,16 @@ namespace sdb {
             return low <= address_ and address_ <= high;
         }
 
+        bool is_hardware() { return is_hardware_; }
+        bool is_internal() { return is_internal_; }
+
     private:
-        breakpoint_site(process& proc, virt_addr addr);
+        breakpoint_site(
+            process& proc, 
+            virt_addr addr,
+            bool is_hardware = false,
+            bool is_internal = false
+        );
         friend process;
     
         id_type id_; // unique id for break point
@@ -41,6 +49,9 @@ namespace sdb {
         virt_addr address_;
         std::byte saved_data_; // saved instructions that will be replaced by int3 for the breaking
         process* process_;
+        bool is_hardware_;
+        bool is_internal_;
+        int hardware_register_index_ = -1; // dr0 - dr3
     };
 }
 
