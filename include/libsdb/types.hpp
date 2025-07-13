@@ -4,6 +4,7 @@
 #include <vector>
 #include <array>
 #include <cstddef>
+#include <cstdint>
 
 namespace sdb {
     using byte64 = std::array<std::byte, 8>;
