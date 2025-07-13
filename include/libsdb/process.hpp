@@ -7,6 +7,7 @@
 #include <vector>
 #include <sys/types.h>  
 #include <libsdb/registers.hpp>
+#include <libsdb/watchpoint.hpp>
 #include <libsdb/breakpoint_site.hpp>
 #include <libsdb/stoppoint_collection.hpp>
 #include <sys/uio.h>
@@ -73,6 +74,21 @@ namespace sdb {
             return breakpoint_sites_;
         }
 
+        watchpoint& create_watchpoint(
+            virt_addr address,
+            stoppoint_mode mode,
+            std::size_t size
+        );
+
+        inline stoppoint_collection<watchpoint>& watchpoints() {
+            return watchpoints_;
+        }
+
+        inline const stoppoint_collection<watchpoint>& watchpoints() const {
+            return watchpoints_;
+        }
+
+
         void set_pc(virt_addr address) {
             get_registers().write_by_id(register_id::rip, address.addr());
         }
@@ -91,6 +107,13 @@ namespace sdb {
         }
 
         int set_hardware_breakpoint(breakpoint_site::id_type id, virt_addr address);
+        int set_watchpoint(
+            watchpoint::id_type id, 
+            virt_addr address,
+            stoppoint_mode mode,
+            std::size_t size
+        );
+
         void clear_hardware_stoppoint(int index);
 
     private:
@@ -109,6 +132,7 @@ namespace sdb {
         bool is_attached_ = true;
         std::unique_ptr<registers> registers_;
         stoppoint_collection<breakpoint_site> breakpoint_sites_;
+        stoppoint_collection<watchpoint> watchpoints_;
     };
 }
 
