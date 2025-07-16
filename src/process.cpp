@@ -8,6 +8,12 @@
 #include <libsdb/bit.hpp>
 
 namespace {
+    void set_ptrace_options(pid_t pid) {
+        if (ptrace(PTRACE_SETOPTIONS, pid, nullptr, PTRACE_O_TRACESYSGOOD) < 0) {
+            sdb::error::send("Failed to set TRACESYSGOOD option");
+        }
+    }
+
     void exit_with_perror(
         sdb::pipe& channel, std::string const& prefix) {
         auto message = prefix + ": " + std::strerror(errno);
@@ -59,6 +65,10 @@ sdb::process::launch(std::filesystem::path path,
     }
 
     if (pid == 0) {
+        if (setpgid(0, 0) < 0) {
+            exit_with_perror(channel, "Could not set gpid");
+        }
+
         // disable ASLR
         personality(ADDR_NO_RANDOMIZE);
 
@@ -88,10 +98,11 @@ sdb::process::launch(std::filesystem::path path,
         error::send(std::string(chars, chars + data.size() + 1));
     }
 
-    std::unique_ptr<process> proc(
-        new process(pid, /*terminate_on_end=*/true, debug));
+    std::unique_ptr<process> proc(new process(pid, /*terminate_on_end=*/true, debug));
+    
     if (debug) {
         proc->wait_on_signal();
+        set_ptrace_options(proc->pid());
     }
 
     return proc;
@@ -106,9 +117,10 @@ sdb::process::attach(pid_t pid) {
         error::send_errno("Could not attach");
     }
 
-    std::unique_ptr<process> proc(
-        new process(pid, /*terminate_on_end=*/false, /*attached=*/true));
+    std::unique_ptr<process> proc(new process(pid, /*terminate_on_end=*/false, /*attached=*/true));
+    
     proc->wait_on_signal();
+    set_ptrace_options(proc->pid());
 
     return proc;
 }
@@ -149,7 +161,10 @@ void sdb::process::resume() {
         bp.enable(); // enable breakpoint so it can be used multiple times
     }
 
-    if (ptrace(PTRACE_CONT, pid_, nullptr, nullptr) < 0) {
+    auto request = syscall_catch_policy_.get_mode() == syscall_catch_policy::mode::none?
+        PTRACE_CONT : PTRACE_SYSCALL;
+
+    if (ptrace(request, pid_, nullptr, nullptr) < 0) {
         error::send_errno("Could not resume");
     }
     state_ = process_state::running;
@@ -205,12 +220,23 @@ sdb::stop_reason sdb::process::wait_on_signal() {
 
     if (is_attached_ and state_ == process_state::stopped) {
         read_all_registers();
+        augment_stop_reason(reason);
 
         // if it stoped due to breakpoint, set pc back 1 byte
         auto instr_begin = get_pc() - 1;
-        if (reason.info == SIGTRAP and breakpoint_sites_.enabled_stoppoint_at_address(instr_begin)) {
-            set_pc(instr_begin);
-        }
+		if (reason.info == SIGTRAP) {
+			if (reason.trap_reason == trap_type::software_break and
+				breakpoint_sites_.contains_address(instr_begin) and
+				breakpoint_sites_.get_by_address(instr_begin).is_enabled()) {
+				set_pc(instr_begin);
+			}
+			else if (reason.trap_reason == trap_type::hardware_break) {
+				auto id = get_current_hardware_stoppoint();
+				if (id.index() == 1) {
+					watchpoints_.get_by_id(std::get<1>(id)).update_data();
+				}
+			}
+		}
     }
 
     return reason;
@@ -377,4 +403,48 @@ int sdb::process::set_watchpoint(
     std::size_t size
 ) {
     return set_hardware_stoppoint(address, mode, size);
+}
+
+void sdb::process::augment_stop_reason(stop_reason& reason) {
+    siginfo_t info;
+
+    if (ptrace(PTRACE_GETSIGINFO, pid_, nullptr, &info) < 0) {
+        sdb::error::send("Failed to get signal infpo");
+    }
+
+    reason.trap_reason = trap_type::unknown;
+    if (reason.info == SIGTRAP) {
+        switch (info.si_code)
+        {
+        case TRAP_TRACE:
+            reason.trap_reason = trap_type::single_step;
+            break;
+        case SI_KERNEL:
+            reason.trap_reason = trap_type::software_break;
+            break;
+        case TRAP_HWBKPT:
+            reason.trap_reason = trap_type::hardware_break;
+            break;
+        }
+    }
+}
+
+std::variant<sdb::breakpoint_site::id_type, sdb::watchpoint::id_type>
+sdb::process::get_current_hardware_stoppoint() const {
+    auto& regs = get_registers();
+    auto status = regs.read_by_id_as<std::uint64_t>(register_id::dr6);
+    auto index = __builtin_ctzll(status); // get num of trailing zeros so we get index of debug register
+
+    auto id = static_cast<int>(register_id::dr0) + index;
+    auto addr = virt_addr(regs.read_by_id_as<std::uint64_t>(static_cast<register_id>(id)));
+
+    using ret = std::variant<sdb::breakpoint_site::id_type, sdb::watchpoint::id_type>;
+
+    if (breakpoint_sites_.contains_address(addr)) {
+        auto site_id = breakpoint_sites_.get_by_address(addr).id();
+        return ret { std::in_place_index<0>, site_id };
+    } else {
+        auto watch_id = watchpoints_.get_by_address(addr).id();
+        return ret { std::in_place_index<1>, watch_id };
+    }
 }
