@@ -482,8 +482,8 @@ TEST_CASE("Syscall catchpoints work", "[catchpoint]") {
     auto dev_null = open("/dev/null", O_WRONLY);
     auto proc = process::launch("targets/anti_debugger", true, dev_null);
 
-    auto write_syscall = syscall_name_to_id("write");
-    auto policy = sdb::syscall_catch_policy::catch_some({write_syscall});
+    auto write_syscall = sdb::syscall_name_to_id("write");
+    auto policy = sdb::syscall_catch_policy::catch_some({ write_syscall });
     proc->set_syscall_catch_policy(policy);
 
     proc->resume();
@@ -496,7 +496,7 @@ TEST_CASE("Syscall catchpoints work", "[catchpoint]") {
     REQUIRE(reason.syscall_info->entry == true);
 
     proc->resume();
-    proc->wait_on_signal();
+    reason = proc->wait_on_signal();
 
     REQUIRE(reason.reason == sdb::process_state::stopped);
     REQUIRE(reason.info == SIGTRAP);
