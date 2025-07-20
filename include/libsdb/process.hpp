@@ -18,6 +18,7 @@ namespace sdb {
         single_step, 
         software_break,
         hardware_break,
+        syscall,
         unknown
     };
 
@@ -29,12 +30,22 @@ namespace sdb {
         terminated
     };
 
+    struct syscall_information {
+        std::uint16_t id;
+        bool entry; // entry or exit (PTRACE_SYSCALL will halt inferior for both)
+        union {
+            std::array<std::uint64_t, 6> args;
+            std::int64_t ret;
+        };
+    };
+
     struct stop_reason {
         stop_reason(int wait_status);
 
         process_state reason;
         std::uint8_t info;
         std::optional<trap_type> trap_reason;
+        std::optional<syscall_information> syscall_info;
     };
 
     class syscall_catch_policy {
@@ -173,6 +184,8 @@ namespace sdb {
 
         int set_hardware_stoppoint(virt_addr address, stoppoint_mode mode, std::size_t size);
 
+        sdb::stop_reason maybe_resume_from_syscall(const stop_reason& reason);
+
         pid_t pid_ = 0;
         bool terminate_on_end_ = true;
         process_state state_ = process_state::stopped;
@@ -181,6 +194,8 @@ namespace sdb {
         stoppoint_collection<breakpoint_site> breakpoint_sites_;
         stoppoint_collection<watchpoint> watchpoints_;
         syscall_catch_policy syscall_catch_policy_ = syscall_catch_policy::catch_none();
+        
+        bool expecting_syscall_exit = false;
     };
 }
 
