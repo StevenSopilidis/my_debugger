@@ -27,6 +27,20 @@ namespace sdb {
         span<const std::byte> get_section_contents(std::string_view name) const;
 
         std::string_view get_string(std::size_t index) const;
+
+        virt_addr load_bias() const {
+            return load_bias_;
+        }
+
+        void notify_loaded(virt_addr address) {
+            load_bias_ = address;
+        }
+
+        const Elf64_Shdr* get_section_containing_address(file_addr addr) const;
+        const Elf64_Shdr* get_section_containing_address(virt_addr addr) const;
+
+        std::optional<file_addr> get_section_start_addr(std::string_view name) const;
+
     private:
         void parse_section_headers();
         void build_section_map();
@@ -38,6 +52,7 @@ namespace sdb {
         Elf64_Ehdr header_;
         std::vector<Elf64_Shdr> section_headers_;
         std::unordered_map<std::string_view, Elf64_Shdr*> section_map_;
+        virt_addr load_bias_;
     };
 }
 
