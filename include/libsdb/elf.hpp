@@ -6,8 +6,10 @@
 #include <elf.h>
 #include <string_view>
 #include <unordered_map>
+#include <map>
 #include <optional>
 #include <libsdb/types.hpp>
+
 
 namespace sdb {
     class elf {
@@ -41,9 +43,20 @@ namespace sdb {
 
         std::optional<file_addr> get_section_start_addr(std::string_view name) const;
 
+        std::vector<const Elf64_Sym*> get_symbols_by_name(std::string_view name) const;
+
+        std::optional<const Elf64_Sym*> get_symbol_at_address(file_addr addr) const;
+        std::optional<const Elf64_Sym*> get_symbol_at_address(virt_addr addr) const;
+
+        std::optional<const Elf64_Sym*> get_symbol_containing_address(file_addr addr) const;
+        std::optional<const Elf64_Sym*> get_symbol_containing_address(virt_addr addr) const;
+
+
     private:
         void parse_section_headers();
+        void parse_symbol_table();
         void build_section_map();
+        void build_symbol_maps();
 
         int fd_;
         std::filesystem::path path_;
@@ -51,8 +64,24 @@ namespace sdb {
         std::byte* data_;
         Elf64_Ehdr header_;
         std::vector<Elf64_Shdr> section_headers_;
-        std::unordered_map<std::string_view, Elf64_Shdr*> section_map_;
+        std::vector<Elf64_Sym> symbol_table_;
+        std::map<std::string_view, Elf64_Shdr*> section_map_;
         virt_addr load_bias_;
+
+        // symbol_name ---> symbols
+        std::unordered_multimap<std::string_view, Elf64_Sym*> symbol_name_map_;
+
+        struct range_comparator {
+            bool operator()(
+              std::pair<file_addr, file_addr> lhs,
+              std::pair<file_addr, file_addr> rhs
+            ) const {
+                return lhs.first < rhs.first;
+            }
+        };
+
+        // address_range ---> symbol
+        std::map<std::pair<file_addr, file_addr>, Elf64_Sym*, range_comparator> symbol_addr_map_;  
     };
 }
 
