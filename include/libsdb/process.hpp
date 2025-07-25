@@ -174,6 +174,9 @@ namespace sdb {
             syscall_catch_policy_ = info;
         }
 
+        // function for getting auxilary vectors
+        std::unordered_map<int, std::uint64_t> get_auxv() const;
+
     private:
         process(pid_t pid, bool terminate_on_end, bool is_attached)
             : pid_(pid), terminate_on_end_(terminate_on_end),

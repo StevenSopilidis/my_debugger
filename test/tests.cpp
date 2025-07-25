@@ -4,6 +4,7 @@
 #include <libsdb/syscalls.hpp>
 #include <libsdb/pipe.hpp>
 #include <libsdb/bit.hpp>
+#include <libsdb/elf.hpp>
 #include <sys/types.h>
 #include <signal.h>
 #include <fstream>

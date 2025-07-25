@@ -14,28 +14,28 @@ sdb::elf::elf(const std::filesystem::path& path) {
 
     if ((fd_ = open(path_.c_str(), O_LARGEFILE, O_RDONLY)) < 0 ) {
         error::send_errno("Could not open ELF file");
-    
-        struct stat stats;
-        if (fstat(fd_, &stats) < 0) {
-            error::send_errno("Could not retrieve ELF file stats");
-        }
-
-        file_size_ = stats.st_size;
-
-        void* ret;
-        if((ret = mmap(0, file_size_, PROT_READ, MAP_SHARED, fd_, 0)) == MAP_FAILED) {
-            close(fd_);
-            error::send_errno("Could not map ELF file");
-        }
-
-        data_ = reinterpret_cast<std::byte*>(ret);
-        std::copy(data_, data_ + sizeof(header_), as_bytes(header_));
-    
-        parse_section_headers();
-        build_section_map();
-        parse_symbol_table();
-        build_symbol_maps();
     }
+    
+    struct stat stats;
+    if (fstat(fd_, &stats) < 0) {
+        error::send_errno("Could not retrieve ELF file stats");
+    }
+
+    file_size_ = stats.st_size;
+
+    void* ret;
+    if((ret = mmap(0, file_size_, PROT_READ, MAP_SHARED, fd_, 0)) == MAP_FAILED) {
+        close(fd_);
+        error::send_errno("Could not map ELF file");
+    }
+
+    data_ = reinterpret_cast<std::byte*>(ret);
+    std::copy(data_, data_ + sizeof(header_), as_bytes(header_));
+
+    parse_section_headers();
+    build_section_map();
+    parse_symbol_table();
+    build_symbol_maps();
 }
 
 sdb::elf::~elf() {
@@ -143,21 +143,21 @@ void sdb::elf::parse_symbol_table() {
 
 void sdb::elf::build_symbol_maps() {
     for (auto& symbol : symbol_table_) {
-        auto mangled_named = get_string(symbol.st_name);
-        int demangled_status;
+        auto mangled_name = get_string(symbol.st_name);
+        int demangle_status;
 
         auto demangled_name = abi::__cxa_demangle(
-            mangled_named.data(), nullptr, nullptr, &demangled_status
+			mangled_name.data(), nullptr, nullptr, &demangle_status
         );
-
-        if (demangled_status == 0) {
+        
+        if (demangle_status == 0) {
             symbol_name_map_.insert({demangled_name, &symbol});
             free(demangled_name);
         }
-        symbol_name_map_.insert({ demangled_name, &symbol });
+        symbol_name_map_.insert({ mangled_name, &symbol });
     
         if (symbol.st_value != 0 and symbol.st_name != 0 and 
-            ELF64_ST_TYPE(symbol.st_info) != STT_TLS) 
+            symbol.st_info != STT_TLS) 
         {
             auto addr_range = std::pair(
                 file_addr{*this, symbol.st_value},
@@ -199,27 +199,27 @@ std::optional<const Elf64_Sym*> sdb::elf::get_symbol_at_address(virt_addr addres
 }
 
 std::optional<const Elf64_Sym*> sdb::elf::get_symbol_containing_address(file_addr address) const {
-    if (address.elf_file() != this or symbol_addr_map_.empty()) {
-        return std::nullopt;
-    }
+	if (address.elf_file() != this or symbol_addr_map_.empty())
+		return std::nullopt;
 
-    file_addr null_addr;
-    auto it = symbol_addr_map_.lower_bound({address, null_addr});
-    if (it != end(symbol_addr_map_)) {
-        if (auto [key, value] = *it; key.first == address)
-            return value;
-    }
+	file_addr null_addr;
+	auto it = symbol_addr_map_.lower_bound({ address, null_addr });
 
-    if (it == begin(symbol_addr_map_)) {
-        return std::nullopt;
-    }
-    
-    --it;
-    if (auto [key, value] = *it; key.first < address and key.second > address) {
-        return value;
-    }
+	if (it != end(symbol_addr_map_)) {
+		if (auto [key, value] = *it; key.first == address) {
+			return value;
+		}
+	}
 
-    return std::nullopt;
+	if (it == begin(symbol_addr_map_)) return std::nullopt;
+
+	--it;
+	if (auto [key, value] = *it;
+		key.first < address and key.second > address) {
+		return value;
+	}
+
+	return std::nullopt;
 }
 
 std::optional<const Elf64_Sym*> sdb::elf::get_symbol_containing_address(virt_addr address) const {

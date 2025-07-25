@@ -17,6 +17,7 @@
 #include <fmt/ranges.h>
 #include <libsdb/parse.hpp>
 #include <libsdb/disassembler.hpp>
+#include <libsdb/target.hpp>
 
 namespace
 {
@@ -26,17 +27,17 @@ namespace
         kill(g_sdb_process->pid(), SIGSTOP);
     }
 
-    std::unique_ptr<sdb::process> attach(int argc, const char **argv)
-    {
+    std::unique_ptr<sdb::target> attach(int argc, const char **argv)
+    {   
         if (argc == 3 && argv[1] == std::string_view("-p")) {
             pid_t pid = std::atoi(argv[2]);
-            return sdb::process::attach(pid);
+            return sdb::target::attach(pid);
         }
         else {
             const char* program_path = argv[1];
-            auto proc = sdb::process::launch(program_path);
-            fmt::print("Launched process with PID {}\n", proc->pid());
-            return proc;
+            auto target = sdb::target::launch(program_path);
+            fmt::print("Launched process with PID {}\n", target->get_process().pid());
+            return target;
         }
     }
 
@@ -115,34 +116,43 @@ namespace
         return "";
     }
 
+    std::string get_signal_stop_reason(const sdb::target& target, sdb::stop_reason reason) {
+        auto& process = target.get_process();
+		std::string message = fmt::format("stopped with signal {} at {:#x}",
+			sigabbrev_np(reason.info), process.get_pc().addr());
+
+		auto func = target.get_elf().get_symbol_containing_address(process.get_pc());
+
+		if (func and ELF64_ST_TYPE(func.value()->st_info) == STT_FUNC) {
+			message += fmt::format(" ({})", target.get_elf().get_string(func.value()->st_name));
+		}
+
+		if (reason.info == SIGTRAP) {
+			message += get_sigtrap_info(process, reason);
+		}
+
+		return message;
+    }
+
 
     void print_stop_reason(
-        const sdb::process& process,
-        sdb::stop_reason reason
-    ) {
-        std::string message;
+		const sdb::target& target, sdb::stop_reason reason) {
+		std::string message;
+		switch (reason.reason) {
+		case sdb::process_state::exited:
+			message = fmt::format("exited with status {}",
+				static_cast<int>(reason.info));
+			break;
+		case sdb::process_state::terminated:
+			message = fmt::format("terminated with signal {}",sigabbrev_np(reason.info));
+			break;
+		case sdb::process_state::stopped:
+			message = get_signal_stop_reason(target, reason);
+			break;
+		}
 
-        switch (reason.reason)
-        {
-        case sdb::process_state::exited :
-            message = fmt::format("exited with status {}", static_cast<int>(reason.info));
-            break;
-        case sdb::process_state::terminated :
-            message = fmt::format("terminated with signal {}", sigabbrev_np(reason.info));            
-            break;
-        case sdb::process_state::stopped :
-            message = fmt::format("stopped with signal {} at {:#x}",
-                sigabbrev_np(reason.info), process.get_pc().addr());
-            
-            if (reason.info == SIGTRAP) {
-                message += get_sigtrap_info(process, reason);
-            }
-
-            break;
-        }
-
-        fmt::print("Process {} {}\n", process.pid(), message);
-    }
+		fmt::print("Process {} {}\n", target.get_process().pid(), message);
+	}
 
     void print_help(const std::vector<std::string>& args) {
         if (args.size() == 1) {
@@ -475,13 +485,13 @@ namespace
     }
 
     void handle_stop(
-        sdb::process& process,
+        sdb::target& target,
         sdb::stop_reason reason
     ) {
-        print_stop_reason(process, reason);
+        print_stop_reason(target, reason);
 
         if (reason.reason == sdb::process_state::stopped)
-            print_disassembly(process, process.get_pc(), 5);
+            print_disassembly(target.get_process(), target.get_process().get_pc(), 5);
     }
 
     void handle_disassemble_command(
@@ -659,17 +669,18 @@ namespace
     }
 
     void handle_command(
-        std::unique_ptr<sdb::process>& process, 
+        std::unique_ptr<sdb::target>& target, 
         std::string_view line)
     {
         auto args = split(line, ' ');
         auto command = args[0];
+        auto process = &target->get_process();
 
         if (is_prefix(command, "continue"))
         {
             process->resume();
             auto reason = process->wait_on_signal();
-            handle_stop(*process, reason);
+            handle_stop(*target, reason);
         }
         else if (is_prefix(command, "help")) {
             print_help(args);
@@ -682,7 +693,7 @@ namespace
         }
         else if (is_prefix(command, "step")) {
             auto reason = process->step_instruction();
-            handle_stop(*process, reason);
+            handle_stop(*target, reason);
         }
         else if (is_prefix(command, "mem")) {
             handle_memory_command(*process, args);
@@ -701,7 +712,7 @@ namespace
         }
     }
 
-    void main_loop(std::unique_ptr<sdb::process>& process) {
+    void main_loop(std::unique_ptr<sdb::target>& process) {
         char *line = nullptr;
         while ((line = readline("sdb> ")) != nullptr) {
             std::string line_str;
@@ -747,10 +758,10 @@ int main(int argc, const char **argv)
 
     try
     {
-        auto process = attach(argc, argv);
-        g_sdb_process = process.get();
+        auto target = attach(argc, argv);
+        g_sdb_process = &target->get_process();
         signal(SIGINT, handle_sigint);
-        main_loop(process);
+        main_loop(target);
     }
     catch(const std::exception& e)
     {

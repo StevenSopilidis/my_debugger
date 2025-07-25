@@ -6,6 +6,8 @@
 #include <libsdb/pipe.hpp>
 #include <sys/personality.h>
 #include <libsdb/bit.hpp>
+#include <fstream>
+#include <elf.h>
 
 namespace {
     void set_ptrace_options(pid_t pid) {
@@ -499,4 +501,23 @@ sdb::stop_reason sdb::process::maybe_resume_from_syscall(const stop_reason& reas
     }
 
     return reason;
+}
+
+std::unordered_map<int, std::uint64_t> sdb::process::get_auxv() const {
+	auto path = "/proc/" + std::to_string(pid_) + "/auxv";
+	std::ifstream auxv(path);
+
+	std::unordered_map<int, std::uint64_t> ret;
+	std::uint64_t id, value;
+
+	auto read = [&](auto& into) {
+		auxv.read(reinterpret_cast<char*>(&into), sizeof(into));
+		};
+
+	for (read(id); id != AT_NULL; read(id)) {
+		read(value);
+		ret[id] = value;
+	}
+    
+	return ret;
 }
