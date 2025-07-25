@@ -11,6 +11,7 @@
 #include <elf.h>
 #include <regex>
 #include <fcntl.h>
+#include <fstream>
 
 using namespace sdb;
 
@@ -66,6 +67,14 @@ namespace {
         auto entry_file_address = header.e_entry;
         // calculate offset to entry
         return entry_file_address - get_section_load_bias(path, entry_file_address);
+    }
+
+    std::uint64_t get_entry_point(std::filesystem::path path) {
+        std::ifstream elf_file(path);
+
+        Elf64_Ehdr header;
+        elf_file.read(reinterpret_cast<char*>(&header), sizeof(Elf64_Ehdr));
+        return header.e_entry;
     }
 
     virt_addr get_load_address(pid_t pid, std::int64_t offset) {
@@ -506,4 +515,24 @@ TEST_CASE("Syscall catchpoints work", "[catchpoint]") {
     REQUIRE(reason.syscall_info->entry == false);
 
     close(dev_null);
+}
+
+TEST_CASE("ELF Parser works", "[elf]") {
+    auto path = "targets/hello_sdb";
+    sdb::elf elf(path);
+    auto entry = elf.get_header().e_entry;
+    REQUIRE(entry == get_entry_point(path));
+
+    auto sym = elf.get_symbol_at_address(file_addr{elf, entry});
+    auto name = elf.get_string(sym.value()->st_name);
+    REQUIRE(name == "_start");
+
+    auto syms = elf.get_symbols_by_name("_start");
+    name = elf.get_string(syms.at(0)->st_name);
+    REQUIRE(name == "_start");
+
+    elf.notify_loaded(virt_addr{0xcafecafe});
+    sym = elf.get_symbol_at_address(virt_addr{0xcafecafe + entry});
+    name = elf.get_string(sym.value()->st_name);
+    REQUIRE(name == "_start");
 }
