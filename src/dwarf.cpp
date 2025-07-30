@@ -34,13 +34,13 @@ namespace {
         }
 
         std::uint8_t u8() { return fixed_int<std::uint8_t>(); }
-        std::uint8_t u16() { return fixed_int<std::uint16_t>(); }
-        std::uint8_t u32() { return fixed_int<std::uint32_t>(); }
-        std::uint8_t u64() { return fixed_int<std::uint64_t>(); }
-        std::uint8_t s8() { return fixed_int<std::int8_t>(); }
-        std::uint8_t s16() { return fixed_int<std::int16_t>(); }
-        std::uint8_t s32() { return fixed_int<std::int32_t>(); }
-        std::uint8_t s64() { return fixed_int<std::int64_t>(); }
+        std::uint16_t u16() { return fixed_int<std::uint16_t>(); }
+        std::uint32_t u32() { return fixed_int<std::uint32_t>(); }
+        std::uint64_t u64() { return fixed_int<std::uint64_t>(); }
+        std::int8_t s8() { return fixed_int<std::int8_t>(); }
+        std::int16_t s16() { return fixed_int<std::int16_t>(); }
+        std::int32_t s32() { return fixed_int<std::int32_t>(); }
+        std::int64_t s64() { return fixed_int<std::int64_t>(); }
 
         std::string_view string() {
             auto null_terminator = std::find(pos_, data_.end(), std::byte{0});
@@ -202,36 +202,34 @@ namespace {
 		auto address_size = cur.u8();
 
 		if (size == 0xffffffff) {
-            sdb::error::send("Only DWARF32 is supported");
-        }
+			sdb::error::send("Only DWARF32 is supported");
+		}
+		if (version != 4) {
+			sdb::error::send("Only DWARF version 4 is supported");
+		}
+		if (address_size != 8) {
+			sdb::error::send("Invalid address size for DWARF");
+		}
 
-        if (version != 4) {
-            sdb::error::send("Only DWARF version 4 is supported");
-        }
+		size += sizeof(std::uint32_t);
 
-        if (address_size != 8) {
-            sdb::error::send("Invalid address size for DWARF");
-        }
-
-        size += sizeof(std::uint32_t);
-
-        sdb::span<const std::byte> data = { start, size };
-        return std::make_unique<sdb::compile_unit>(dwarf, data, abbrev);
+		sdb::span<const std::byte> data = { start, size };
+		return std::make_unique<sdb::compile_unit>(dwarf, data, abbrev);
     }
 
     std::vector<std::unique_ptr<sdb::compile_unit>> 
     parse_compile_units(sdb::dwarf& dwarf, const sdb::elf& obj) {
-        auto debug_info = obj.get_section_contents(".debug_info");
-        cursor cur(debug_info);
+		auto debug_info = obj.get_section_contents(".debug_info");
+		cursor cur(debug_info);
 
-        std::vector<std::unique_ptr<sdb::compile_unit>> units;
-        while (!cur.finished()) {
-            auto unit = parse_compile_unit(dwarf, obj, cur);
-            cur += unit->data().size();
-            units.push_back(std::move(unit));
-        }
+		std::vector<std::unique_ptr<sdb::compile_unit>> units;
+		while (!cur.finished()) {
+			auto unit = parse_compile_unit(dwarf, obj, cur);
+			cur += unit->data().size();
+			units.push_back(std::move(unit));
+		}
 
-        return units;
+		return units;
     }
 
     sdb::die parse_die(const sdb::compile_unit& cu, cursor cur) {
