@@ -12,6 +12,8 @@
 
 
 namespace sdb {
+    class dwarf;
+
     class elf {
     public:
         elf(const std::filesystem::path& path);
@@ -51,6 +53,8 @@ namespace sdb {
         std::optional<const Elf64_Sym*> get_symbol_containing_address(file_addr addr) const;
         std::optional<const Elf64_Sym*> get_symbol_containing_address(virt_addr addr) const;
 
+        dwarf& get_dwarf() { return *dwarf_; }
+        const dwarf& get_dwarf() const { return *dwarf_; }
 
     private:
         void parse_section_headers();
@@ -67,6 +71,8 @@ namespace sdb {
         std::vector<Elf64_Sym> symbol_table_;
         std::map<std::string_view, Elf64_Shdr*> section_map_;
         virt_addr load_bias_;
+
+        std::unique_ptr<dwarf> dwarf_;
 
         // symbol_name ---> symbols
         std::unordered_multimap<std::string_view, Elf64_Sym*> symbol_name_map_;

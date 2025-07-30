@@ -8,6 +8,7 @@
 #include <libsdb/bit.hpp>
 #include <cxxabi.h>
 #include <algorithm>
+#include <libsdb/dwarf.hpp>
 
 sdb::elf::elf(const std::filesystem::path& path) {
     path_ = path;
@@ -31,11 +32,12 @@ sdb::elf::elf(const std::filesystem::path& path) {
 
     data_ = reinterpret_cast<std::byte*>(ret);
     std::copy(data_, data_ + sizeof(header_), as_bytes(header_));
-
+    
     parse_section_headers();
     build_section_map();
     parse_symbol_table();
     build_symbol_maps();
+    dwarf_ = std::make_unique<dwarf>(*this);
 }
 
 sdb::elf::~elf() {
