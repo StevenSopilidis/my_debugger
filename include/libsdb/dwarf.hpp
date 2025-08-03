@@ -32,7 +32,7 @@ namespace sdb {
             file_addr high;
 
             bool contains(file_addr addr) const {
-                return low <= addr and high >= addr;
+                return low <= addr and high > addr;
             }
         };
 
