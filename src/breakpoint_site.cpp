@@ -2,6 +2,7 @@
 #include <sys/ptrace.h>
 #include <libsdb/process.hpp>
 #include <libsdb/error.hpp>
+#include <libsdb/breakpoint.hpp>
 #include <iostream>
 
 namespace {
@@ -12,16 +13,31 @@ namespace {
 }
 
 sdb::breakpoint_site::breakpoint_site(
-    process& proc, 
-    virt_addr addr,
-    bool is_hardware,
+	process& proc, 
+    virt_addr address, 
+    bool is_hardware, 
     bool is_internal
-) :
-    process_{&proc}, address_{addr}, is_enabled_{ false }, saved_data_ {}, 
-    is_hardware_{is_hardware}, is_internal_{is_internal}
+)
+	: process_{ &proc }, address_{ address }, is_enabled_{ false },
+	saved_data_{}, is_hardware_{ is_hardware },
+	is_internal_{ is_internal } 
 {
-    id_ = is_internal_? -1 : get_next_id();
+	id_ = is_internal_ ? -1 : get_next_id();
 }
+
+sdb::breakpoint_site::breakpoint_site(
+	breakpoint* parent, 
+    id_type id,
+	process& proc, 
+    virt_addr address,
+	bool is_hardware, 
+    bool is_internal
+)
+	: parent_{ parent }, id_(id),
+	process_{ &proc }, address_{ address },
+	is_enabled_{ false }, saved_data_{},
+	is_hardware_{ is_hardware }, is_internal_{ is_internal } 
+{}
 
 void sdb::breakpoint_site::enable() {
     if (is_enabled_) return;

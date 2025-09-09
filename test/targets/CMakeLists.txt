@@ -16,6 +16,8 @@ add_test_cpp_target(hello_sdb)
 add_test_cpp_target(memory_read)
 add_test_cpp_target(memory_write)
 add_test_cpp_target(anti_debugger)
+add_test_cpp_target(overloaded)
+add_test_cpp_target(step)
 
 add_executable(multi_cu multi_cu_main.cpp multi_cu_do_something.cpp)
 target_compile_options(multi_cu PRIVATE -g -O0 -pie -gdwarf-4)

@@ -7,6 +7,7 @@
 
 namespace sdb {
     class process;
+    class breakpoint;
 
     // represents software break point at physical address
     class breakpoint_site {
@@ -37,6 +38,15 @@ namespace sdb {
 
     private:
         breakpoint_site(
+			process& proc, 
+            virt_addr address,
+			bool is_hardware = false, 
+            bool is_internal = false
+        );
+        
+        breakpoint_site(
+            breakpoint* parent,
+            id_type id,
             process& proc, 
             virt_addr addr,
             bool is_hardware = false,
@@ -51,6 +61,7 @@ namespace sdb {
         process* process_;
         bool is_hardware_;
         bool is_internal_;
+        breakpoint* parent_ = nullptr;
         int hardware_register_index_ = -1; // dr0 - dr3
     };
 }

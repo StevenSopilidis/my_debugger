@@ -357,6 +357,47 @@ sdb::dwarf::compile_unit_contains_address(file_addr address) const {
     return nullptr;
 }
 
+std::vector<sdb::die> sdb::dwarf::inline_stack_at_address(file_addr address) const {
+    auto func = function_containing_address(address);
+    std::vector<sdb::die> stack;
+
+    if (func) {
+        stack.push_back(*func);
+        while (true) {
+            const auto& children = stack.back().children();
+            auto found = std::find_if(children.begin(), children.end(),
+                [=](auto& child) {
+                return child.abbrev_entry()->tag == DW_TAG_inlined_subroutine and
+                child.contains_address(address);
+            });  
+
+            if (found == children.end()) {
+                break;
+            }
+            else {
+                stack.push_back(*found);
+            }
+        }
+    }
+
+    return stack;
+}
+
+std::optional<sdb::die>
+sdb::dwarf::function_containing_address(file_addr address) const {
+	index();
+	for (auto& [name, entry] : function_index_) {
+		cursor cur({ entry.pos, entry.cu->data().end() });
+		auto d = parse_die(*entry.cu, cur);
+		if (d.contains_address(address) and
+			d.abbrev_entry()->tag == DW_TAG_subprogram) {
+			return d;
+		}
+	}
+	return std::nullopt;
+}
+
+
 std::vector<sdb::die> sdb::dwarf::find_functions(std::string name) const {
     index();
 
@@ -610,6 +651,24 @@ std::uint64_t sdb::attr::as_int() const {
     case DW_FORM_udata: return cur.uleb128();
     default: error::send("Invalid integer type");
     }
+}
+
+std::vector<sdb::line_table::iterator>
+sdb::line_table::get_entries_by_line(
+	std::filesystem::path path, std::size_t line) const {
+	std::vector<iterator> entries;
+
+	for (auto it = begin(); it != end(); ++it) {
+		auto& entry_path = it->file_entry->path;
+		if (it->line == line) {
+			if ((path.is_absolute() and entry_path == path) or
+				(path.is_relative() and path_ends_in(entry_path, path))) {
+				entries.push_back(it);
+			}
+		}
+	}
+
+	return entries;
 }
 
 sdb::span<const std::byte> sdb::attr::as_block() const {

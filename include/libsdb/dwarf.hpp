@@ -158,6 +158,10 @@ namespace sdb {
             std::filesystem::path path, std::size_t line
         ) const;
 
+        std::vector<iterator> get_entries_by_line(
+			std::filesystem::path path, std::size_t line
+        ) const;
+
     private:
         sdb::span<const std::byte> data_;
         const compile_unit* cu_;
@@ -321,7 +325,7 @@ namespace sdb {
             std::optional<die> die_;
         };
 
-        iterator begin() {
+        iterator begin() const {
             if (die_.abbrev_->has_childen) {
                 return iterator{ die_ };
             }
@@ -329,7 +333,7 @@ namespace sdb {
             return end();
         };
 
-        iterator end() {
+        iterator end() const {
             return iterator{};
         }
 
@@ -349,7 +353,7 @@ namespace sdb {
         compile_units() const { return compile_units_; }
 
         const compile_unit* compile_unit_contains_address(file_addr address) const;
-        std::optional<die> function_contains_address(file_addr address) const; 
+        std::optional<die> function_containing_address(file_addr address) const; 
 
         std::vector<die> find_functions(std::string name) const;
 
@@ -358,6 +362,11 @@ namespace sdb {
             if (!cu) return {};
             return cu->lines().get_entry_by_address(address);
         }
+
+        // calculates stack of inline functions at given address
+        // first item is the outer non-inlined functions
+        // subsequent elements are inlined inside the outer
+        std::vector<die> inline_stack_at_address(file_addr address) const;
 
     private:
         void index() const; // indexing set of DIEs

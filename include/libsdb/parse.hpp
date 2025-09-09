@@ -13,7 +13,7 @@ namespace sdb {
     std::optional<I> to_integral(std::string_view sv, int base = 10) {
         auto begin = sv.begin();
 
-        if (base == 16 and sv.size() > 1 and begin[0] == 'o' and begin[1] == 'x') {
+        if (base == 16 and sv.size() > 1 and begin[0] == '0' and begin[1] == 'x') {
             // skip ox in hex format
             begin += 2;
         }
