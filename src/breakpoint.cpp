@@ -46,7 +46,7 @@ void sdb::function_breakpoint::resolve() {
     auto found_functions = target_->find_functions(function_name_);
 
     // iterate over dwarf functions 
-    for (auto die : found_functions.dwarf_fuctions) {
+    for (auto die : found_functions.dwarf_functions) {
         if (die.contains(DW_AT_low_pc) or die.contains(DW_AT_ranges)) {
             file_addr addr;
             if (die.abbrev_entry()->tag == DW_TAG_inlined_subroutine) {

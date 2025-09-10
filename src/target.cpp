@@ -147,7 +147,7 @@ sdb::target::line_entry_at_pc() const {
     auto pc = get_pc_file_address();
     if (!pc.elf_file()) return line_table::iterator{};
 
-    auto cu = pc.elf_file()->get_dwarf().compile_unit_contains_address(pc);
+    auto cu = pc.elf_file()->get_dwarf().compile_unit_containing_address(pc);
     if (!cu) return line_table::iterator{};
     return cu->lines().get_entry_by_address(pc);
 }
@@ -185,8 +185,8 @@ sdb::target::find_functions(std::string name) const {
             result.elf_functions.push_back(std::pair{elf_.get(), sym});
         }
     } else {
-        result.dwarf_fuctions.insert(
-            result.dwarf_fuctions.end(),
+        result.dwarf_functions.insert(
+            result.dwarf_functions.end(),
             dwarf_found.begin(), dwarf_found.end()
         );
     }

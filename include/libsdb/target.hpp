@@ -43,7 +43,7 @@ namespace sdb
         sdb::stop_reason step_over();
     
         struct find_functions_result {
-            std::vector<die> dwarf_fuctions;
+            std::vector<die> dwarf_functions;
             std::vector<std::pair<const elf*, const Elf64_Sym*>> elf_functions;
         };
         find_functions_result find_functions(std::string name) const;
