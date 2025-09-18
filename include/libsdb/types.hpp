@@ -137,6 +137,7 @@ namespace sdb {
 	};
 
     class file_offset {
+    public:
         file_offset() = default;
         file_offset(const elf& elf, std::uint64_t off) : elf_{&elf}, off_{off} {};
 
