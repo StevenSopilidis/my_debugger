@@ -172,6 +172,8 @@ namespace
                 mem         - Command for operating on memory
                 register    - Commands for operating on registers
                 disassemble - Disassemble machine code into assembly
+                down        - Select the stack frame below the current one
+                up          - Select the stack frame above the current one
                 step        - Step over a single instruction
                 watchpoint  - Command for operating on watchpoints
                 catchpoint  - Commands for operating catchpoints
@@ -233,7 +235,7 @@ namespace
     }
 
     void handle_register_read(
-        sdb::process& process,
+        sdb::target& target,
         const std::vector<std::string>& args
     ) {
         auto format = [](auto t) {
@@ -250,17 +252,22 @@ namespace
             }
         };
 
+        auto& regs = target.get_stack().regs();
+        auto print_register_value = [&](auto info) {
+            if (regs.is_undefined(info.id)) {
+                fmt::print("{}:\tundefined\n", info.name);
+            }
+            else {
+                auto value = regs.read(info);
+                fmt::print("{}:\t{}\n", info.name, std::visit(format, value));
+            }
+        };
+
         if (args.size() == 2 or args.size() == 3 and args[2] == "all") {
             for (auto& info : sdb::g_register_infos) {
-                // print all general registers
-                auto should_print = (args.size() == 3 or info.type == sdb::register_type::gpr)
-                    and info.name != "orig_rax";
-
-                if (!should_print)
-                    continue;
-
-                auto value = process.get_registers().read(info);
-                fmt::print("{}:\t{}\n", info.name, std::visit(format, value));
+                if (args.size() == 3 or info.type == sdb::register_type::gpr) {
+                    print_register_value(info);
+                }
             }
         }
         else if (args.size() == 3) {
@@ -268,16 +275,33 @@ namespace
             try
             {
                 auto info = sdb::register_info_by_name(args[2]);
-                auto value = process.get_registers().read(info);
-                fmt::print("{}:\t{}\n", info.name, std::visit(format, value));
+                print_register_value(info);
             }
             catch(const std::exception& e)
             {
                 std::cerr << "No such register\n";
+                return;
             }
         }
         else {
             print_help({"help", "register"});
+        }
+    }
+
+    void print_backtrace(const sdb::target& target) {
+        auto& stack = target.get_stack();
+        auto i = 0;
+        for (auto& frame : stack.frames()) {
+            auto pc = frame.backtrace_report_address;
+            auto func_name = target.function_name_at_address(pc);
+            std::string message = i == stack.current_frame_index() ? "*" : " ";
+            message += fmt::format("[{}]: {:#x} {}", i++, pc.addr(), func_name);
+            
+            if (frame.inlined) {
+                message += fmt::format(" [inlined] {}", *frame.func_die.name());
+            }
+
+            fmt::print("{}\n", message);
         }
     }
 
@@ -331,7 +355,7 @@ namespace
     }
 
     void handle_register_command(
-        sdb::process& process,
+        sdb::target& target,
         const std::vector<std::string>& args
     ) {
         if (args.size() < 2) {
@@ -340,9 +364,9 @@ namespace
         }
 
         if (is_prefix(args[1], "read"))
-            handle_register_read(process, args);
+            handle_register_read(target, args);
         else if(is_prefix(args[1], "write"))
-            handle_register_write(process, args);
+            handle_register_write(target.get_process(), args);
         else
             print_help({"help", "regiter"});
     }
@@ -597,6 +621,16 @@ namespace
         std::cout << std::endl;
     }
 
+    void print_code_location(sdb::target& target) {
+        if (target.get_stack().has_frames()) {
+			auto& frame = target.get_stack().current_frame();
+			print_source(frame.location.file->path, frame.location.line, 3);
+		}
+		else {
+			print_disassembly(target.get_process(), target.get_process().get_pc(), 5);
+		}
+    }
+
     void handle_stop(
         sdb::target& target,
         sdb::stop_reason reason
@@ -604,18 +638,7 @@ namespace
         print_stop_reason(target, reason);
 
         if (reason.reason == sdb::process_state::stopped) {
-            if (target.get_stack().inline_height() > 0) {
-                auto stack = target.get_stack().inline_stack_at_pc();
-                auto frame = stack[stack.size() - target.get_stack().inline_height()];
-                print_source(frame.file().path, frame.line(), 3);
-            }
-            else if (auto entry = target.line_entry_at_pc();
-                entry != sdb::line_table::iterator{}) {
-                print_source(entry->file_entry->path, entry->line, 3);
-            }
-            else {
-                print_disassembly(target.get_process(), target.get_process().get_pc(), 5);
-            }
+            print_code_location(target);
         }
     }
 
@@ -811,7 +834,7 @@ namespace
             print_help(args);
         }
         else if (is_prefix(command, "register")) {
-            handle_register_command(*process, args);
+            handle_register_command(*target, args);
         }
         else if (is_prefix(command, "breakpoint")) {
             handle_breakpoint_command(*target, args);
@@ -825,6 +848,17 @@ namespace
         }
         else if (is_prefix(command, "disassemble")) {
             handle_disassemble_command(*process, args);
+        }
+        else if (is_prefix(command, "up")) {
+            target->get_stack().up();
+            print_code_location(*target);
+        }
+        else if (is_prefix(command, "down")) {
+            target->get_stack().down();
+            print_code_location(*target);
+        }
+        else if (is_prefix(command, "backtrace")) {
+            print_backtrace(*target);
         }
         else if (is_prefix(command, "watchpoint")) {
             handle_watchpoint_command(*process, args);

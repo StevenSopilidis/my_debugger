@@ -3,6 +3,7 @@
 
 #include <libsdb/detail/dwarf.h>
 #include <libsdb/types.hpp>
+#include <libsdb/registers.hpp>
 #include <unordered_map>
 #include <vector>
 #include <cstdint>
@@ -57,6 +58,13 @@ namespace sdb {
 
 		const dwarf& dwarf_info() const { return *dwarf_; }
 		const common_information_entry& get_cie(file_offset at) const;
+
+		registers unwind(
+			const process& proc,
+			file_addr pc,
+			registers& regs
+		) const;
+		
 	private:
 		const dwarf* dwarf_; // dwarf unit call frame belongs to
 		mutable std::unordered_map<std::uint32_t, common_information_entry> cie_map_; // offset to cie
@@ -297,6 +305,7 @@ namespace sdb {
 		const line_table::file* file;
 		std::uint64_t line;
 	};
+	
 	class die {
 	public:
 		explicit die(const std::byte* next) : next_(next) {}
