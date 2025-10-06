@@ -539,19 +539,17 @@ namespace {
 	}
 
 	sdb::registers execute_unwind_rules(
-		unwind_context& ctx,
-		sdb::registers& old_regs,
-		const sdb::process& proc
-	) {
+		unwind_context& ctx, sdb::registers& old_regs,
+		const sdb::process& proc) {
 		auto unwound_regs = old_regs;
 
 		auto cfa_reg_info = sdb::register_info_by_dwarf(ctx.cfa_rule.reg);
-		auto cfa = std::get<std::uint64_t>(old_regs.read(cfa_reg_info)) + ctx.cfa_rule.offset;
-		old_regs.set_cfa(sdb::virt_addr{cfa});
-		unwound_regs.write_by_id(sdb::register_id::rsp, {cfa}, false);
+		auto cfa = std::get<std::uint64_t>(old_regs.read(cfa_reg_info)) +
+			ctx.cfa_rule.offset;
+		old_regs.set_cfa(sdb::virt_addr{ cfa });
+		unwound_regs.write_by_id(sdb::register_id::rsp, { cfa }, false);
 
-		for (auto [reg, rule] : ctx.register_rules)
-		{
+		for (auto [reg, rule] : ctx.register_rules) {
 			auto reg_info = sdb::register_info_by_dwarf(reg);
 
 			if (auto undef = std::get_if<undefined_rule>(&rule)) {
@@ -574,10 +572,8 @@ namespace {
 				auto addr = cfa + val_offset->offset;
 				unwound_regs.write(reg_info, { addr }, false);
 			}
-			
-			return unwound_regs;
 		}
-		
+		return unwound_regs;
 	}
 
 	sdb::call_frame_information::frame_description_entry parse_fde(

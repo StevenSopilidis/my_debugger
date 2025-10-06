@@ -671,7 +671,7 @@ TEST_CASE("Source-level breakpoints", "[breakpoint]") {
     auto dev_null = open("/dev/null", O_WRONLY);
     auto target = target::launch("targets/overloaded", dev_null);
     auto& proc = target->get_process();
-
+ 
     target->create_line_breakpoint("overloaded.cpp", 17).enable();
     proc.resume();
     proc.wait_on_signal();
@@ -717,7 +717,7 @@ TEST_CASE("Source-level stepping", "[target]") {
 
     proc.resume();
     proc.wait_on_signal();
-
+ 
     auto entry = target->line_entry_at_pc();
     REQUIRE(entry->file_entry->path.filename() == "overloaded.cpp");
     REQUIRE(entry->line == 17);
