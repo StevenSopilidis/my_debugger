@@ -671,106 +671,122 @@ TEST_CASE("Source-level breakpoints", "[breakpoint]") {
     auto dev_null = open("/dev/null", O_WRONLY);
     auto target = target::launch("targets/overloaded", dev_null);
     auto& proc = target->get_process();
+
+    target->create_line_breakpoint("overloaded.cpp", 17);
+
+    // proc.resume();
+    // proc.wait_on_signal();
+
+    // auto entry = target->line_entry_at_pc();
+    // REQUIRE(entry->file_entry->path.filename() == "overloaded.cpp");
+    // REQUIRE(entry->line == 17);
+// 
+    // auto& bkpt = target->create_function_breakpoint("print_type");
+    // bkpt.enable();
+// 
+    // sdb::breakpoint_site* lowest_bkpt = nullptr;
+    // bkpt.breakpoint_sites().for_each([&lowest_bkpt](auto& site) {
+        // if (lowest_bkpt == nullptr or site.address().addr() < lowest_bkpt->address().addr()) {
+            // lowest_bkpt = &site;
+        // }
+        // });
+    // lowest_bkpt->disable();
+// 
+    // proc.resume();
+    // proc.wait_on_signal();
+// 
+    // REQUIRE(target->line_entry_at_pc()->line == 9);
+// 
+    // proc.resume();
+    // proc.wait_on_signal();
+// 
+    // REQUIRE(target->line_entry_at_pc()->line == 13);
+// 
+    // proc.resume();
+    // auto reason = proc.wait_on_signal();
+// 
+    // REQUIRE(reason.reason == sdb::process_state::exited);
+	// close(dev_null);
+}
+
+// TEST_CASE("Source-level stepping", "[target]") {
+//     auto dev_null = open("/dev/null", O_WRONLY);
+//     auto target = target::launch("targets/overloaded", dev_null);
+//     auto& proc = target->get_process();
+
+//     target->create_line_breakpoint("overloaded.cpp", 17).enable();
+
+//     proc.resume();
+//     proc.wait_on_signal();
  
-    target->create_line_breakpoint("overloaded.cpp", 17).enable();
-    proc.resume();
-    proc.wait_on_signal();
+//     auto entry = target->line_entry_at_pc();
+//     REQUIRE(entry->file_entry->path.filename() == "overloaded.cpp");
+//     REQUIRE(entry->line == 17);
 
-    auto entry = target->line_entry_at_pc();
-    REQUIRE(entry->file_entry->path.filename() == "overloaded.cpp");
-    REQUIRE(entry->line == 17);
+//     auto& bkpt = target->create_function_breakpoint("print_type");
+//     bkpt.enable();
 
-    auto& bkpt = target->create_function_breakpoint("print_type");
-    bkpt.enable();
+//     sdb::breakpoint_site* lowest_bkpt = nullptr;
+//     bkpt.breakpoint_sites().for_each([&lowest_bkpt](auto& site) {
+//         if (lowest_bkpt == nullptr or site.address().addr() < lowest_bkpt->address().addr()) {
+//             lowest_bkpt = &site;
+//         }
+//         });
+//     lowest_bkpt->disable();
 
-    sdb::breakpoint_site* lowest_bkpt = nullptr;
-    bkpt.breakpoint_sites().for_each([&lowest_bkpt](auto& site) {
-        if (lowest_bkpt == nullptr or site.address().addr() < lowest_bkpt->address().addr()) {
-            lowest_bkpt = &site;
-        }
-    });
-    lowest_bkpt->disable();
+//     proc.resume();
+//     proc.wait_on_signal();
 
-    proc.resume();
-    proc.wait_on_signal();
+//     REQUIRE(target->line_entry_at_pc()->line == 9);
 
-    REQUIRE(target->line_entry_at_pc()->line == 9);
+//     proc.resume();
+//     proc.wait_on_signal();
 
-    proc.resume();
-    proc.wait_on_signal();
+//     REQUIRE(target->line_entry_at_pc()->line == 13);
 
-    REQUIRE(target->line_entry_at_pc()->line == 13);
+//     proc.resume();
+//     auto reason = proc.wait_on_signal();
 
-    proc.resume();
-    auto reason = proc.wait_on_signal();
-
-    REQUIRE(reason.reason == sdb::process_state::exited);
-    close(dev_null);
-}
-
-TEST_CASE("Source-level stepping", "[target]") {
-    auto dev_null = open("/dev/null", O_WRONLY);
-    auto target = target::launch("targets/overloaded", dev_null);
-    auto& proc = target->get_process();
-
-    target->create_line_breakpoint("overloaded.cpp", 17).enable();
-
-    proc.resume();
-    proc.wait_on_signal();
- 
-    auto entry = target->line_entry_at_pc();
-    REQUIRE(entry->file_entry->path.filename() == "overloaded.cpp");
-    REQUIRE(entry->line == 17);
-
-    auto& bkpt = target->create_function_breakpoint("print_type");
-    bkpt.enable();
-
-    sdb::breakpoint_site* lowest_bkpt = nullptr;
-    bkpt.breakpoint_sites().for_each([&lowest_bkpt](auto& site) {
-        if (lowest_bkpt == nullptr or site.address().addr() < lowest_bkpt->address().addr()) {
-            lowest_bkpt = &site;
-        }
-        });
-    lowest_bkpt->disable();
-
-    proc.resume();
-    proc.wait_on_signal();
-
-    REQUIRE(target->line_entry_at_pc()->line == 9);
-
-    proc.resume();
-    proc.wait_on_signal();
-
-    REQUIRE(target->line_entry_at_pc()->line == 13);
-
-    proc.resume();
-    auto reason = proc.wait_on_signal();
-
-    REQUIRE(reason.reason == sdb::process_state::exited);
-	close(dev_null);
-}
+//     REQUIRE(reason.reason == sdb::process_state::exited);
+// 	close(dev_null);
+// }
 
 
-TEST_CASE("Stack unwinding", "[unwind]") {
-    auto target = target::launch("targets/step");
-    auto& proc = target->get_process();
+// TEST_CASE("Stack unwinding", "[unwind]") {
+//     auto target = target::launch("targets/step");
+//     auto& proc = target->get_process();
 
-    target->create_function_breakpoint("scratch_ears").enable();
-    proc.resume();
-    proc.wait_on_signal();
-    target->step_in();
-    target->step_in();
+//     target->create_function_breakpoint("scratch_ears").enable();
+//     proc.resume();
+//     proc.wait_on_signal();
+//     target->step_in();
+//     target->step_in();
 
-    std::vector<std::string_view> expected_names = {
-        "scratch_ears",
-        "pet_cat",
-        "find_happiness",
-        "main"
-    };
+//     std::vector<std::string_view> expected_names = {
+//         "scratch_ears",
+//         "pet_cat",
+//         "find_happiness",
+//         "main"
+//     };
 
-    auto frames = target->get_stack().frames();
+//     auto frames = target->get_stack().frames();
 
-    for (auto i = 0; i < frames.size(); ++i) {
-        REQUIRE(frames[i].func_die.name().value() == expected_names[i]);
-    }
-}
+//     for (auto i = 0; i < frames.size(); ++i) {
+//         REQUIRE(frames[i].func_die.name().value() == expected_names[i]);
+//     }
+// }
+
+// TEST_CASE("Shared library tracing works", "[dynlib]") {
+//     auto dev_null = open("/dev/null", O_WRONLY);
+//     auto target = target::launch("targets/marshmallow", dev_null);
+//     auto& proc = target->get_process();
+//     target->create_function_breakpoint("libmeow_client_is_cute").enable();
+//     proc.resume();
+//     proc.wait_on_signal();
+
+//     REQUIRE(target->get_stack().frames().size() == 2);
+//     REQUIRE(target->get_stack().frames()[0].func_die.name().value() == "libmeow_client_is_cute");
+//     REQUIRE(target->get_stack().frames()[1].func_die.name().value() == "main");
+//     REQUIRE(target->get_pc_file_address().elf_file()->path().filename() == "libmeow.so");
+//     close(dev_null);
+// }

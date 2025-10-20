@@ -85,7 +85,7 @@ void sdb::stack::unwind() {
     auto elf = file_pc.elf_file();
     if (!elf) return;
 
-    while (virt_pc.addr() != 0 and elf == &target_->get_elf()) {
+    while (virt_pc.addr() != 0 and elf) {
         // create stack_frame objects and unwind another frame
         auto& dwarf = elf->get_dwarf();
         auto inline_stack = dwarf.inline_stack_at_address(file_pc);
@@ -102,7 +102,7 @@ void sdb::stack::unwind() {
         virt_pc = virt_addr{
             regs.read_by_id_as<std::uint64_t>(register_id::rip) - 1
         };
-        file_pc = virt_pc.to_file_addr(target_->get_elf());
+        file_pc = virt_pc.to_file_addr(target_->get_elves());
         elf = file_pc.elf_file();
     }
 }

@@ -97,6 +97,35 @@ namespace sdb {
         // address_range ---> symbol
         std::map<std::pair<file_addr, file_addr>, Elf64_Sym*, range_comparator> symbol_addr_map_;  
     };
+
+    class elf_collection {
+    public:
+        void push(std::unique_ptr<elf> elf) {
+            elves_.push_back(std::move(elf));
+        }
+
+        template <class F>
+        void for_each(F f) {
+            for (auto& elf : elves_) {
+                f(*elf);
+            }
+        }
+
+        template <class F>
+        void for_each(F f) const {
+            for (const auto& elf : elves_) {
+                f(*elf);
+            }
+        }
+
+
+        const elf* get_elf_containing_address(virt_addr address) const;
+        const elf* get_elf_by_path(std::filesystem::path path) const;
+        const elf* get_elf_by_filename(std::string_view name) const;
+
+    private:
+        std::vector<std::unique_ptr<elf>> elves_;
+    };
 }
 
 
