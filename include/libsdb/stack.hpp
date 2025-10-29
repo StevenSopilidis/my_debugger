@@ -19,6 +19,7 @@ namespace sdb {
     class stack {
     public:
         stack(target* tgt) : target_{tgt} {}
+        stack(target* tgt, pid_t tid) : target_(tgt), tid_(tid) {}
         void reset_inline_height();
         std::vector<sdb::die> inline_stack_at_pc() const;
         std::uint32_t inline_height() const { return inline_height_; }
@@ -59,6 +60,7 @@ namespace sdb {
             bool inlined
         );
 
+        pid_t tid_ = 0;
         target* target_ = nullptr;
         std::uint32_t inline_height_ = 0; // location at which process stopped
         std::vector<stack_frame> frames_;

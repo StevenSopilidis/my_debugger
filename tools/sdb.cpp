@@ -31,6 +31,24 @@ namespace
         kill(g_sdb_process->pid(), SIGSTOP);
     }
 
+    void thread_lifecycle_callback(const sdb::stop_reason& reason) {
+        std::string_view action;
+        switch (reason.reason)
+        {
+        case sdb::process_state::exited:
+            action = "exited";
+            break;
+        case sdb::process_state::terminated:
+            action = "terminated";
+            break;
+        case sdb::process_state::stopped:
+            action = "created";
+            break;
+        }
+
+        fmt::print("Thread {} {}\n", reason.tid, action);
+    }
+
     std::unique_ptr<sdb::target> attach(int argc, const char **argv)
     {   
         if (argc == 3 && argv[1] == std::string_view("-p")) {
@@ -69,12 +87,12 @@ namespace
         sdb::stop_reason reason
     ) {
         if (reason.trap_reason == sdb::trap_type::software_break) {
-            auto& site = process.breakpoint_sites().get_by_address(process.get_pc());
+            auto& site = process.breakpoint_sites().get_by_address(process.get_pc(reason.tid));
             return fmt::format(" (breakpoint {})", site.id());
         }  
 
         if (reason.trap_reason == sdb::trap_type::hardware_break) {
-            auto id = process.get_current_hardware_stoppoint();
+            auto id = process.get_current_hardware_stoppoint(reason.tid);
 
             if (id.index() == 0) {
                 // if hardware_breakpoint just print its id
@@ -122,11 +140,11 @@ namespace
 
     std::string get_signal_stop_reason(const sdb::target& target, sdb::stop_reason reason) {
         auto& process = target.get_process();
-        auto pc = process.get_pc();
+        auto pc = process.get_pc(reason.tid);
         std::string message = fmt::format("stopped with signal {} at {:#x}",
             sigabbrev_np(reason.info), pc.addr());
 
-        auto line = target.line_entry_at_pc();
+        auto line = target.line_entry_at_pc(reason.tid);
         if (line != sdb::line_table::iterator()) {
             auto file = line->file_entry->path.filename().string();
             message += fmt::format(", {}:{}", file, line->line);
@@ -145,24 +163,24 @@ namespace
     }
 
 
-    void print_stop_reason(
-		const sdb::target& target, sdb::stop_reason reason) {
-		std::string message;
-		switch (reason.reason) {
-		case sdb::process_state::exited:
-			message = fmt::format("exited with status {}",
-				static_cast<int>(reason.info));
-			break;
-		case sdb::process_state::terminated:
-			message = fmt::format("terminated with signal {}",sigabbrev_np(reason.info));
-			break;
-		case sdb::process_state::stopped:
-			message = get_signal_stop_reason(target, reason);
-			break;
-		}
-
-		fmt::print("Process {} {}\n", target.get_process().pid(), message);
-	}
+    void print_stop_reason(const sdb::target& target, sdb::stop_reason reason) {
+        switch (reason.reason) {
+            case sdb::process_state::exited:
+                fmt::print("Process {} exited with status {}\n",
+                    target.get_process().pid(),
+                    static_cast<int>(reason.info));
+                    return;
+            case sdb::process_state::terminated:
+                fmt::print("Process {} terminated with signal {}\n",
+                    target.get_process().pid(),
+                    sigabbrev_np(reason.info));
+                return;
+            case sdb::process_state::stopped:
+                fmt::print("Thread {} {}\n",
+                    reason.tid, get_signal_stop_reason(target, reason));
+                return;
+        }
+    }
 
     void print_help(const std::vector<std::string>& args) {
         if (args.size() == 1) {
@@ -180,7 +198,14 @@ namespace
                 next        - Step-over
                 step        - Step-in
                 finish      - Step-out
-                stepi - Single instruction step
+                stepi       - Single instruction step
+                thread      - Commands for operating on threads
+            )" << "\n";
+        }
+        else if (is_prefix(args[1], "thread")) {
+            std::cerr << R"(Available commands:
+                list
+                select <thread ID>
             )" << "\n";
         }
         else if (is_prefix(args[1], "register")) {
@@ -816,6 +841,39 @@ namespace
         }
     }
 
+    void handle_thread_command(
+        sdb::target& target,
+        const std::vector<std::string>& args
+    ) {
+        if (args.size() < 2) {
+            print_help({"help", "thread"});
+            return;
+        }
+
+        if (is_prefix(args[1], "list")) {
+            for (auto& [tid, thread] : target.threads()) {
+                auto prefix = tid == target.get_process().current_thread() ? "*" : " ";
+                fmt::print(
+                    "{}Thread {}: {}\n", prefix, tid,
+                    get_signal_stop_reason(target, thread.state->reason));
+            }
+        }
+        else if (is_prefix(args[1], "select")) {
+            if (args.size() != 3) {
+                print_help({"help", "thread"});
+                return;
+            }
+
+            auto tid = sdb::to_integral<pid_t>(args[2]);
+            if (!tid) {
+                std::cerr << "Invalid thread id\n";
+                return;
+            }
+
+            target.get_process().set_current_thread(*tid);
+        }
+    }
+
     void handle_command(
         std::unique_ptr<sdb::target>& target, 
         std::string_view line)
@@ -826,9 +884,12 @@ namespace
 
         if (is_prefix(command, "continue"))
         {
-            process->resume();
+            process->resume_all_threads();
             auto reason = process->wait_on_signal();
             handle_stop(*target, reason);
+        }
+        else if (is_prefix(command, "thread")) {
+            handle_thread_command(*target, args);
         }
         else if (is_prefix(command, "help")) {
             print_help(args);
@@ -936,6 +997,7 @@ int main(int argc, const char **argv)
         auto target = attach(argc, argv);
         g_sdb_process = &target->get_process();
         signal(SIGINT, handle_sigint);
+        target->get_process().install_thead_lifecycle_callback(thread_lifecycle_callback);
         main_loop(target);
     }
     catch(const std::exception& e)

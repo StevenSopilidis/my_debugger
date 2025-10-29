@@ -18,6 +18,8 @@ add_test_cpp_target(memory_write)
 add_test_cpp_target(anti_debugger)
 add_test_cpp_target(overloaded)
 add_test_cpp_target(step)
+add_test_cpp_target(multi_threaded)
+
 
 add_executable(multi_cu multi_cu_main.cpp multi_cu_do_something.cpp)
 target_compile_options(multi_cu PRIVATE -g -O0 -pie -gdwarf-4)
@@ -32,3 +34,4 @@ add_test_cpp_target(marshmallow)
 add_library(meow SHARED "libmeow.cpp")
 target_compile_options(meow PRIVATE -g -O0 -fPIC -gdwarf-4)
 target_link_libraries(marshmallow PRIVATE meow)
+target_link_libraries(multi_threaded pthread)
